@@ -1,7 +1,7 @@
 import streamlit as st
 import bcrypt
 
-# ----------------------- Simulated Databases -----------------------
+
 users_db = {}  # Dictionary to store user information
 transactions_db = [
     {"Transaction ID": "TX001", "Amount": "$50", "Type": "Groceries"},
