@@ -251,73 +251,78 @@ def main():
                     expiry_date = st.text_input("Expiry Date (MM/YY)")
                     credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
                     if st.button("Add Card"):
-                        add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
-                        st.success("Card added successfully!")
+                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
+                        if "success" in result:
+                            st.success(result)
+                        else:
+                            st.error(result)
                 elif card_action == "View and Edit Cards":
                     cards = get_credit_cards(st.session_state['user_id'])
                     if cards:
-                        selected_card = st.selectbox("Select a Card", [card[2] for card in cards])
-                        selected_card_data = next(card for card in cards if card[2] == selected_card)
-                        expiry_date = st.text_input("Expiry Date", selected_card_data[3])
-                        credit_score = st.number_input("Credit Score", min_value=0, max_value=850, value=selected_card_data[4])
-                        if st.button("Update Card"):
-                            update_credit_card(selected_card_data[0], expiry_date, credit_score)
+                        st.table(cards)
+                        card_id = st.number_input("Card ID to Edit", min_value=0)
+                        new_expiry_date = st.text_input("New Expiry Date (MM/YY)")
+                        new_credit_score = st.number_input("New Credit Score", min_value=0, max_value=850)
+                        if st.button("Update Card Details"):
+                            update_credit_card(card_id, new_expiry_date, new_credit_score)
                             st.success("Card details updated successfully!")
 
             elif selected_function == "Rewards and Offers":
                 st.subheader("Rewards and Offers")
+                if st.button("Check for Rewards"):
+                    result = check_rewards(st.session_state['user_id'])
+                    st.info(result)
                 rewards = get_rewards(st.session_state['user_id'])
-                if not rewards:
-                    st.write("No rewards yet.")
-                for reward in rewards:
-                    st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
-                reward_message = check_rewards(st.session_state['user_id'])
-                st.write(reward_message)
+                if rewards:
+                    st.table(rewards)
+                else:
+                    st.info("No rewards available. Shop to earn rewards!")
 
             elif selected_function == "Transaction History":
                 st.subheader("Transaction History")
                 cards = get_credit_cards(st.session_state['user_id'])
                 if cards:
-                    card_number = st.selectbox("Select Credit Card", [card[2] for card in cards])
-                    transactions = get_last_transactions(card_number)
-                    st.write(f"Last 10 Transactions for Card {card_number}:")
-                    for transaction in transactions:
-                        st.write(f"Amount: ₹{transaction[2]}, Date: {transaction[3]}, Description: {transaction[4]}")
-                        st.write("---")
+                    card_number = st.selectbox("Select Card", [card[2] for card in cards])
+                    if st.button("View Transactions"):
+                        transactions = get_last_transactions(card_number)
+                        if transactions:
+                            st.table(transactions)
+                        else:
+                            st.info("No transactions available.")
                 else:
-                    st.write("No credit cards found. Please add one first.")
+                    st.warning("No cards found. Add a card first.")
+
+            elif selected_function == "Perform Transaction":
+                st.subheader("Perform a Transaction")
+                cards = get_credit_cards(st.session_state['user_id'])
+                if cards:
+                    card_number = st.selectbox("Select Card", [card[2] for card in cards])
+                    amount = st.number_input("Transaction Amount", min_value=0.0, format="%.2f")
+                    description = st.text_area("Description")
+                    if st.button("Complete Transaction"):
+                        add_transaction(card_number, amount, description)
+                        st.success("Transaction completed successfully!")
+                else:
+                    st.warning("No cards found. Add a card first.")
 
             elif selected_function == "Customer Support":
                 st.subheader("Customer Support")
                 faq = get_support_faq()
-                st.write("Frequently Asked Questions:")
-                for question in faq:
-                    st.write(question)
-                st.write("Submit a Query:")
-                query = st.text_area("Describe your issue")
+                st.markdown("\n".join(faq))
+                query = st.text_area("Submit a Query")
                 if st.button("Submit Query"):
                     submit_support_query(st.session_state['user_id'], query)
-                    st.success("Your query has been submitted. Our support team will respond shortly.")
+                    st.success("Query submitted. Support team will respond soon.")
 
             elif selected_function == "Analytics and Reports":
-                st.subheader("Analytics and Reports")
+                st.subheader("Transaction Analytics and Reports")
                 data = get_transaction_data(st.session_state['user_id'])
                 if not data.empty:
-                    st.write("Transaction Data:")
-                    st.dataframe(data)
-                    st.write("### Spending Trends Over Time")
-                    data["Transaction Date"] = pd.to_datetime(data["Transaction Date"])
-                    data.sort_values(by="Transaction Date", inplace=True)
-                    spending_data = data.groupby(data["Transaction Date"].dt.to_period("M"))["Amount"].sum()
-                    st.line_chart(spending_data)
-
-                    st.write("### Total Spending by Credit Card")
-                    card_spending = data.groupby("Card Number")["Amount"].sum()
-                    st.bar_chart(card_spending)
+                    st.line_chart(data.set_index("Transaction Date")["Amount"])
+                    st.table(data)
                 else:
-                    st.write("No transaction data available.")
+                    st.info("No transaction data available.")
 
-# Initialize Database and Run App
-if __name__ == '__main__':
+if __name__ == "__main__":
     init_db()
     main()
