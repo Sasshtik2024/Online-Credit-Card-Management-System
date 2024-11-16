@@ -212,6 +212,7 @@ def main():
                 "Credit Card Management", 
                 "Rewards and Offers", 
                 "Transaction History", 
+                "Perform Transaction", 
                 "Customer Support", 
                 "Analytics and Reports"
             ]
@@ -250,6 +251,19 @@ def main():
                             credit_score = st.number_input("New Credit Score", min_value=0, max_value=850, key=f"score_{card[0]}")
                             update_credit_card(card[0], expiry_date, credit_score)
                             st.success("Card details updated successfully!")
+
+            elif selected_function == "Perform Transaction":
+                st.subheader("Perform a Transaction")
+                cards = get_credit_cards(st.session_state['user_id'])
+                if cards:
+                    card_number = st.selectbox("Select Credit Card", [card[2] for card in cards])
+                    amount = st.number_input("Amount", min_value=0.01)
+                    description = st.text_input("Transaction Description")
+                    if st.button("Perform Transaction"):
+                        add_transaction(card_number, amount, description)
+                        st.success("Transaction performed successfully!")
+                else:
+                    st.write("No credit cards found. Please add one first.")
 
             elif selected_function == "Rewards and Offers":
                 st.subheader("Rewards and Offers")
