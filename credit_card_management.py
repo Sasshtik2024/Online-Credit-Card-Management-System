@@ -1,128 +1,194 @@
 import streamlit as st
+import sqlite3
+from hashlib import sha256
 
-# ----------------------- Simulated Databases -----------------------
-users_db = {}  # Dictionary to store user information
-transactions_db = [
-    {"Transaction ID": "TX001", "Amount": "$50", "Type": "Groceries"},
-    {"Transaction ID": "TX002", "Amount": "$200", "Type": "Electronics"},
-]
-rewards_db = [
-    {"Reward ID": "RW001", "Points": 500, "Status": "Available"},
-    {"Reward ID": "RW002", "Points": 200, "Status": "Redeemed"},
-]
+# Database setup
+def init_db():
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY, 
+                    username TEXT UNIQUE, 
+                    password TEXT,
+                    email TEXT, 
+                    phone TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS credit_cards (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    card_number TEXT UNIQUE,
+                    expiry_date TEXT,
+                    credit_score INTEGER,
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS rewards (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    reward_name TEXT,
+                    points INTEGER,
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
+    conn.commit()
+    conn.close()
 
-# ----------------------- Login & Registration -----------------------
+# User Authentication
+def register_user(username, password, email, phone):
+    try:
+        conn = sqlite3.connect('credit_card_system.db')
+        c = conn.cursor()
+        hashed_password = sha256(password.encode()).hexdigest()
+        c.execute("INSERT INTO users (username, password, email, phone) VALUES (?, ?, ?, ?)", 
+                  (username, hashed_password, email, phone))
+        conn.commit()
+        conn.close()
+    except sqlite3.IntegrityError:
+        return "Username already exists."
+    return "Registration successful."
 
-def login_page():
-    """Render the login page."""
-    st.title("Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        user = users_db.get(username)
-        if user and user['password'] == password:
-            st.session_state['user'] = username
-            st.success("Logged in successfully!")
-            st.experimental_rerun()
-        else:
-            st.error("Invalid username or password!")
+def login_user(username, password):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    hashed_password = sha256(password.encode()).hexdigest()
+    c.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, hashed_password))
+    data = c.fetchone()
+    conn.close()
+    return data
 
-def register_page():
-    """Render the registration page."""
-    st.title("Register")
-    username = st.text_input("Choose a Username")
-    password = st.text_input("Create Password", type="password")
-    if st.button("Register"):
-        if username in users_db:
-            st.error("Username already exists!")
-        else:
-            users_db[username] = {"password": password, "cards": []}
-            st.success("Registration successful! Please log in.")
+def update_user_details(user_id, email, phone):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET email = ?, phone = ? WHERE id = ?", (email, phone, user_id))
+    conn.commit()
+    conn.close()
 
-# ----------------------- Functionalities -----------------------
+# Credit Card Management
+def add_credit_card(user_id, card_number, expiry_date, credit_score):
+    try:
+        conn = sqlite3.connect('credit_card_system.db')
+        c = conn.cursor()
+        c.execute("INSERT INTO credit_cards (user_id, card_number, expiry_date, credit_score) VALUES (?, ?, ?, ?)", 
+                  (user_id, card_number, expiry_date, credit_score))
+        conn.commit()
+        conn.close()
+    except sqlite3.IntegrityError:
+        return "Card number already exists."
+    return "Card added successfully."
 
-def user_account_management():
-    """Manage user account settings."""
-    st.title("User Account Management")
-    st.write(f"Welcome, {st.session_state['user']}")
-    if st.button("Logout"):
-        st.session_state.clear()
-        st.experimental_rerun()
+def update_credit_card(card_id, expiry_date, credit_score):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("UPDATE credit_cards SET expiry_date = ?, credit_score = ? WHERE id = ?", 
+              (expiry_date, credit_score, card_id))
+    conn.commit()
+    conn.close()
 
-def credit_card_management():
-    """Manage credit cards."""
-    st.title("Credit Card Management")
-    user = st.session_state['user']
-    cards = users_db[user]["cards"]
-    st.write("Your Cards:")
-    if cards:
-        st.write(", ".join(cards))
-    else:
-        st.write("No cards available.")
-    if st.button("Apply for a New Card"):
-        card_id = f"CC{len(cards) + 1:03}"
-        users_db[user]["cards"].append(card_id)
-        st.success(f"New card {card_id} issued!")
+def get_credit_cards(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM credit_cards WHERE user_id = ?", (user_id,))
+    cards = c.fetchall()
+    conn.close()
+    return cards
 
-def transaction_details():
-    """Display transaction history."""
-    st.title("Transaction Details")
-    st.write("Your Transaction History:")
-    st.table(transactions_db)
+# Rewards and Offers
+def add_reward(user_id, reward_name, points):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO rewards (user_id, reward_name, points) VALUES (?, ?, ?)", 
+              (user_id, reward_name, points))
+    conn.commit()
+    conn.close()
 
-def rewards_and_offers():
-    """Show rewards and offers."""
-    st.title("Rewards and Offers")
-    st.write("Your Rewards:")
-    st.table(rewards_db)
+def get_rewards(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM rewards WHERE user_id = ?", (user_id,))
+    rewards = c.fetchall()
+    conn.close()
+    return rewards
 
-def payment_and_billing():
-    """Handle payments and billing."""
-    st.title("Payment and Billing")
-    st.write("Pay your bills or view statements here.")
-    if st.button("Pay Now"):
-        st.success("Payment processed successfully!")
-
-def customer_support():
-    """Provide customer support interface."""
-    st.title("Customer Support")
-    issue = st.text_area("Describe your issue:")
-    if st.button("Submit Issue"):
-        if issue:
-            st.success("Your issue has been submitted. Our team will contact you shortly.")
-        else:
-            st.error("Please describe your issue before submitting.")
-
-# ----------------------- Main App ------------------------------
-
+# Streamlit App
 def main():
-    """Main application function."""
+    st.title("Online Credit Card Management System")
     st.sidebar.title("Navigation")
-    if 'user' not in st.session_state:
-        st.sidebar.radio("Choose an option:", ["Login", "Register"], key="auth_page")
-        if st.session_state.auth_page == "Login":
-            login_page()
-        elif st.session_state.auth_page == "Register":
-            register_page()
-    else:
-        option = st.sidebar.selectbox(
-            "Choose a feature",
-            ["User Account Management", "Credit Card Management",
-             "Transaction Details", "Rewards and Offers",
-             "Payment and Billing", "Customer Support"]
-        )
-        if option == "User Account Management":
-            user_account_management()
-        elif option == "Credit Card Management":
-            credit_card_management()
-        elif option == "Transaction Details":
-            transaction_details()
-        elif option == "Rewards and Offers":
-            rewards_and_offers()
-        elif option == "Payment and Billing":
-            payment_and_billing()
-        elif option == "Customer Support":
-            customer_support()
+    menu = ["Login", "Register", "Dashboard"]
+    choice = st.sidebar.selectbox("Menu", menu)
 
-if __name__ == "__main__":
+    if choice == "Login":
+        st.subheader("Login Section")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        if st.button("Login"):
+            user = login_user(username, password)
+            if user:
+                st.success(f"Welcome {username}!")
+                st.session_state['logged_in'] = True
+                st.session_state['user_id'] = user[0]
+                st.session_state['username'] = username
+            else:
+                st.warning("Incorrect Username/Password")
+
+    elif choice == "Register":
+        st.subheader("Create a New Account")
+        new_user = st.text_input("Username")
+        new_password = st.text_input("Password", type="password")
+        email = st.text_input("Email")
+        phone = st.text_input("Phone")
+        if st.button("Register"):
+            result = register_user(new_user, new_password, email, phone)
+            if "successful" in result:
+                st.success(result)
+                st.info("Go to Login Menu to login")
+            else:
+                st.error(result)
+
+    elif choice == "Dashboard":
+        if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+            st.warning("Please login first.")
+        else:
+            st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
+            dashboard_menu = ["User Management", "Credit Card Management", "Rewards and Offers"]
+            selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
+
+            if selected_function == "User Management":
+                st.subheader("Update Account Details")
+                email = st.text_input("New Email")
+                phone = st.text_input("New Phone")
+                if st.button("Update Details"):
+                    update_user_details(st.session_state['user_id'], email, phone)
+                    st.success("Account details updated successfully!")
+
+            elif selected_function == "Credit Card Management":
+                st.subheader("Manage Your Credit Cards")
+                action = st.radio("Select Action", ["Add New Card", "View and Edit Cards"])
+                if action == "Add New Card":
+                    card_number = st.text_input("Card Number")
+                    expiry_date = st.text_input("Expiry Date (MM/YY)")
+                    credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
+                    if st.button("Add Card"):
+                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
+                        if "successfully" in result:
+                            st.success(result)
+                        else:
+                            st.error(result)
+                elif action == "View and Edit Cards":
+                    cards = get_credit_cards(st.session_state['user_id'])
+                    for card in cards:
+                        st.write(f"Card Number: {card[2]}")
+                        st.write(f"Expiry Date: {card[3]}")
+                        st.write(f"Credit Score: {card[4]}")
+                        st.write("---")
+                        if st.button(f"Update Card {card[2]}"):
+                            new_expiry = st.text_input(f"New Expiry for {card[2]}")
+                            new_score = st.number_input(f"New Credit Score for {card[2]}", min_value=0, max_value=850)
+                            update_credit_card(card[0], new_expiry, new_score)
+                            st.success("Card updated successfully!")
+
+            elif selected_function == "Rewards and Offers":
+                st.subheader("View Your Rewards")
+                rewards = get_rewards(st.session_state['user_id'])
+                for reward in rewards:
+                    st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
+                    st.write("---")
+
+# Initialize Database and Run App
+if __name__ == '__main__':
+    init_db()
     main()
