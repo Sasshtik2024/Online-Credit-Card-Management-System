@@ -54,9 +54,9 @@ def register_user(username, password, email, phone):
                   (username, hashed_password, email, phone))
         conn.commit()
         conn.close()
+        return "Registration successful."
     except sqlite3.IntegrityError:
         return "Username already exists."
-    return "Registration successful."
 
 def login_user(username, password):
     conn = sqlite3.connect('credit_card_system.db')
@@ -67,47 +67,18 @@ def login_user(username, password):
     conn.close()
     return data
 
-def update_user_details(user_id, email, phone):
-    conn = sqlite3.connect('credit_card_system.db')
-    c = conn.cursor()
-    c.execute("UPDATE users SET email = ?, phone = ? WHERE id = ?", (email, phone, user_id))
-    conn.commit()
-    conn.close()
-
 # Credit Card Management
 def add_credit_card(user_id, card_number, expiry_date, credit_score, credit_limit):
     try:
         conn = sqlite3.connect('credit_card_system.db')
         c = conn.cursor()
-        
-        # Check if the card number already exists
-        c.execute("SELECT * FROM credit_cards WHERE card_number = ?", (card_number,))
-        existing_card = c.fetchone()
-        if existing_card:
-            conn.close()
-            return "Card number already exists."
-        
-        # Insert new credit card
-        c.execute("""INSERT INTO credit_cards (user_id, card_number, expiry_date, credit_score, credit_limit) 
-                     VALUES (?, ?, ?, ?, ?)""", 
+        c.execute("INSERT INTO credit_cards (user_id, card_number, expiry_date, credit_score, credit_limit) VALUES (?, ?, ?, ?, ?)", 
                   (user_id, card_number, expiry_date, credit_score, credit_limit))
         conn.commit()
         conn.close()
         return "Card added successfully."
-    
-    except sqlite3.IntegrityError as e:
-        conn.close()
-        return f"Error: {e}. This card number may already exist."
-
-def update_credit_card(card_id, expiry_date, credit_score, credit_limit):
-    conn = sqlite3.connect('credit_card_system.db')
-    c = conn.cursor()
-    c.execute("""UPDATE credit_cards 
-                 SET expiry_date = ?, credit_score = ?, credit_limit = ? 
-                 WHERE id = ?""", 
-              (expiry_date, credit_score, credit_limit, card_id))
-    conn.commit()
-    conn.close()
+    except sqlite3.IntegrityError:
+        return "Card number already exists."
 
 def get_credit_cards(user_id):
     conn = sqlite3.connect('credit_card_system.db')
@@ -121,7 +92,6 @@ def get_credit_cards(user_id):
 def add_transaction(card_number, amount, description):
     conn = sqlite3.connect('credit_card_system.db')
     c = conn.cursor()
-    # Check card details and current balance
     c.execute("SELECT credit_limit, current_balance FROM credit_cards WHERE card_number = ?", (card_number,))
     card = c.fetchone()
     if card:
@@ -129,141 +99,56 @@ def add_transaction(card_number, amount, description):
         if current_balance + amount > credit_limit:
             conn.close()
             return "Transaction failed: Credit limit exceeded."
-        else:
-            # Add transaction and update balance
-            c.execute("""INSERT INTO transactions (card_number, amount, transaction_date, description) 
-                         VALUES (?, ?, datetime('now'), ?)""", 
-                      (card_number, amount, description))
-            c.execute("UPDATE credit_cards SET current_balance = current_balance + ? WHERE card_number = ?", 
-                      (amount, card_number))
-            conn.commit()
-            conn.close()
-            return "Transaction successful!"
+        c.execute("INSERT INTO transactions (card_number, amount, transaction_date, description) VALUES (?, ?, datetime('now'), ?)", 
+                  (card_number, amount, description))
+        c.execute("UPDATE credit_cards SET current_balance = current_balance + ? WHERE card_number = ?", 
+                  (amount, card_number))
+        conn.commit()
+        conn.close()
+        return "Transaction successful!"
     conn.close()
     return "Transaction failed: Invalid card."
-
-def get_last_transactions(card_number, limit=10):
-    conn = sqlite3.connect('credit_card_system.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM transactions WHERE card_number = ? ORDER BY transaction_date DESC LIMIT ?", 
-              (card_number, limit))
-    transactions = c.fetchall()
-    conn.close()
-    return transactions
-
-# Rewards and Offers
-def get_rewards(user_id):
-    conn = sqlite3.connect('credit_card_system.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM rewards WHERE user_id = ?", (user_id,))
-    rewards = c.fetchall()
-    conn.close()
-    return rewards
-
-# Analytics and Reports
-def get_transaction_data(user_id):
-    conn = sqlite3.connect('credit_card_system.db')
-    c = conn.cursor()
-    query = '''
-        SELECT t.card_number, t.amount, t.transaction_date 
-        FROM transactions t 
-        JOIN credit_cards c ON t.card_number = c.card_number 
-        WHERE c.user_id = ? 
-        ORDER BY t.transaction_date ASC
-    '''
-    c.execute(query, (user_id,))
-    data = c.fetchall()
-    conn.close()
-    return pd.DataFrame(data, columns=["Card Number", "Amount", "Transaction Date"])
 
 # Streamlit App
 def main():
     st.title("Online Credit Card Management System")
-    st.sidebar.title("Navigation")
     menu = ["Login", "Register", "Dashboard"]
     choice = st.sidebar.selectbox("Menu", menu)
 
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+
     if choice == "Login":
-        st.subheader("Login Section")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
             user = login_user(username, password)
             if user:
-                st.success(f"Welcome {username}!")
-                st.session_state['logged_in'] = True
-                st.session_state['user_id'] = user[0]
-                st.session_state['username'] = username
+                st.session_state["logged_in"] = True
+                st.session_state["user_id"] = user[0]
+                st.session_state["username"] = user[1]
+                st.success(f"Welcome {st.session_state['username']}!")
             else:
                 st.warning("Incorrect Username/Password")
 
     elif choice == "Register":
-        st.subheader("Create a New Account")
         new_user = st.text_input("Username")
         new_password = st.text_input("Password", type="password")
         email = st.text_input("Email")
         phone = st.text_input("Phone")
         if st.button("Register"):
             result = register_user(new_user, new_password, email, phone)
-            st.success(result if "successful" in result else result)
+            st.success(result)
 
-    elif choice == "Dashboard":
-        if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
-            st.warning("Please login first.")
-        else:
-            st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
-            dashboard_menu = [
-                "User Management", 
-                "Credit Card Management", 
-                "Transaction Management",
-                "Rewards and Offers", 
-                "Analytics and Reports"
-            ]
-            selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
+    elif choice == "Dashboard" and st.session_state["logged_in"]:
+        st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
+        cards = get_credit_cards(st.session_state["user_id"])
+        st.write("Your Cards:")
+        st.write(cards)
+        st.write("Add more features as needed.")
 
-            if selected_function == "User Management":
-                email = st.text_input("New Email")
-                phone = st.text_input("New Phone")
-                if st.button("Update Details"):
-                    update_user_details(st.session_state['user_id'], email, phone)
-                    st.success("Details updated successfully!")
-
-            elif selected_function == "Credit Card Management":
-                action = st.radio("Action", ["Add New Card", "View and Edit Cards"])
-                if action == "Add New Card":
-                    card_number = st.text_input("Card Number")
-                    expiry_date = st.text_input("Expiry Date (MM/YY)")
-                    credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
-                    credit_limit = st.number_input("Credit Limit", min_value=0.0)
-                    if st.button("Add Card"):
-                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score, credit_limit)
-                        st.success(result if "successful" in result else result)
-                else:
-                    cards = get_credit_cards(st.session_state['user_id'])
-                    for card in cards:
-                        if st.button(f"Edit {card[2]}"):
-                            expiry_date = st.text_input(f"Expiry Date for {card[2]}", value=card[3])
-                            credit_score = st.number_input(f"Credit Score for {card[2]}", value=card[4])
-                            credit_limit = st.number_input(f"Credit Limit for {card[2]}", value=card[5])
-                            if st.button(f"Update {card[2]}"):
-                                update_credit_card(card[0], expiry_date, credit_score, credit_limit)
-                                st.success(f"Card {card[2]} updated successfully!")
-
-            elif selected_function == "Transaction Management":
-                card_number = st.text_input("Card Number")
-                amount = st.number_input("Transaction Amount")
-                description = st.text_input("Transaction Description")
-                if st.button("Add Transaction"):
-                    result = add_transaction(card_number, amount, description)
-                    st.success(result)
-
-            elif selected_function == "Rewards and Offers":
-                rewards = get_rewards(st.session_state['user_id'])
-                st.write(pd.DataFrame(rewards, columns=["Reward Name", "Points"]))
-
-            elif selected_function == "Analytics and Reports":
-                report = get_transaction_data(st.session_state['user_id'])
-                st.write(report)
+    else:
+        st.warning("Please login to access the Dashboard.")
 
 if __name__ == "__main__":
     init_db()
