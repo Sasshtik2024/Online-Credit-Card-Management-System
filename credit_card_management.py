@@ -1,7 +1,6 @@
 import streamlit as st
-import bcrypt
 
-
+# ----------------------- Simulated Databases -----------------------
 users_db = {}  # Dictionary to store user information
 transactions_db = [
     {"Transaction ID": "TX001", "Amount": "$50", "Type": "Groceries"},
@@ -12,17 +11,7 @@ rewards_db = [
     {"Reward ID": "RW002", "Points": 200, "Status": "Redeemed"},
 ]
 
-# ----------------------- Helper Functions -----------------------
-
-def hash_password(password):
-    """Hash a password for secure storage."""
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-
-def check_password(password, hashed):
-    """Check if a password matches the stored hash."""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed)
-
-# ----------------------- Login & Registration -------------------
+# ----------------------- Login & Registration -----------------------
 
 def login_page():
     """Render the login page."""
@@ -31,7 +20,7 @@ def login_page():
     password = st.text_input("Password", type="password")
     if st.button("Login"):
         user = users_db.get(username)
-        if user and check_password(password, user['password']):
+        if user and user['password'] == password:
             st.session_state['user'] = username
             st.success("Logged in successfully!")
             st.experimental_rerun()
@@ -47,8 +36,7 @@ def register_page():
         if username in users_db:
             st.error("Username already exists!")
         else:
-            hashed_pwd = hash_password(password)
-            users_db[username] = {"password": hashed_pwd, "cards": []}
+            users_db[username] = {"password": password, "cards": []}
             st.success("Registration successful! Please log in.")
 
 # ----------------------- Functionalities -----------------------
