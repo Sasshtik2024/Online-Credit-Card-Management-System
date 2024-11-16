@@ -84,8 +84,8 @@ def add_credit_card(user_id, card_number, expiry_date, credit_score, credit_limi
                   (user_id, card_number, expiry_date, credit_score, credit_limit))
         conn.commit()
         conn.close()
-    except sqlite3.IntegrityError:
-        return "Card number already exists."
+    except sqlite3.IntegrityError as e:
+        return f"Error: {e}. This card number may already exist."
     return "Card added successfully."
 
 def update_credit_card(card_id, expiry_date, credit_score, credit_limit):
@@ -232,9 +232,9 @@ def main():
                     for card in cards:
                         st.write(f"Card Number: {card[2]}, Expiry Date: {card[3]}, Credit Score: {card[4]}, Credit Limit: ₹{card[5]}, Current Balance: ₹{card[6]}")
                         if st.button(f"Edit {card[2]}"):
-                            expiry_date = st.text_input("Expiry Date", value=card[3], key=f"exp_{card[0]}")
-                            credit_score = st.number_input("Credit Score", value=card[4], key=f"score_{card[0]}")
-                            credit_limit = st.number_input("Credit Limit", value=card[5], key=f"limit_{card[0]}")
+                            expiry_date = st.text_input(f"Expiry Date for {card[2]}", value=card[3])
+                            credit_score = st.number_input(f"Credit Score for {card[2]}", value=card[4])
+                            credit_limit = st.number_input(f"Credit Limit for {card[2]}", value=card[5])
                             if st.button(f"Update {card[2]}"):
                                 update_credit_card(card[0], expiry_date, credit_score, credit_limit)
                                 st.success("Card details updated!")
