@@ -16,19 +16,28 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS credit_cards (
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER,
-                    card_number TEXT UNIQUE NOT NULL,
-                    expiry_date TEXT NOT NULL,
+                    card_number TEXT UNIQUE,
+                    expiry_date TEXT,
                     credit_score INTEGER,
-                    credit_limit REAL,
-                    current_balance REAL DEFAULT 0,
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS rewards (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    reward_name TEXT,
+                    points INTEGER,
                     FOREIGN KEY(user_id) REFERENCES users(id))''')
     c.execute('''CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY,
                     card_number TEXT,
                     amount REAL,
                     transaction_date TEXT,
-                    description TEXT,
-                    FOREIGN KEY(card_number) REFERENCES credit_cards(card_number))''')
+                    description TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS support_queries (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    query TEXT,
+                    response TEXT DEFAULT 'Pending',
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
     conn.commit()
     conn.close()
 
@@ -42,100 +51,257 @@ def register_user(username, password, email, phone):
                   (username, hashed_password, email, phone))
         conn.commit()
         conn.close()
-        return "Registration successful."
     except sqlite3.IntegrityError:
         return "Username already exists."
+    return "Registration successful."
 
 def login_user(username, password):
     conn = sqlite3.connect('credit_card_system.db')
     c = conn.cursor()
     hashed_password = sha256(password.encode()).hexdigest()
     c.execute("SELECT * FROM users WHERE username = ? AND password = ?", (username, hashed_password))
-    user = c.fetchone()
+    data = c.fetchone()
     conn.close()
-    return user
+    return data
+
+def update_user_details(user_id, email, phone):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("UPDATE users SET email = ?, phone = ? WHERE id = ?", (email, phone, user_id))
+    conn.commit()
+    conn.close()
 
 # Credit Card Management
-def add_credit_card(user_id, card_number, expiry_date, credit_score, credit_limit):
+def add_credit_card(user_id, card_number, expiry_date, credit_score):
     try:
         conn = sqlite3.connect('credit_card_system.db')
         c = conn.cursor()
-        c.execute("""INSERT INTO credit_cards 
-                     (user_id, card_number, expiry_date, credit_score, credit_limit) 
-                     VALUES (?, ?, ?, ?, ?)""", 
-                  (user_id, card_number, expiry_date, credit_score, credit_limit))
+        c.execute("INSERT INTO credit_cards (user_id, card_number, expiry_date, credit_score) VALUES (?, ?, ?, ?)", 
+                  (user_id, card_number, expiry_date, credit_score))
         conn.commit()
         conn.close()
-        return "Card added successfully."
     except sqlite3.IntegrityError:
-        return "Card number already exists or invalid input."
+        return "Card number already exists."
+    return "Card added successfully."
+
+def update_credit_card(card_id, expiry_date, credit_score):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("UPDATE credit_cards SET expiry_date = ?, credit_score = ? WHERE id = ?", 
+              (expiry_date, credit_score, card_id))
+    conn.commit()
+    conn.close()
 
 def get_credit_cards(user_id):
     conn = sqlite3.connect('credit_card_system.db')
     c = conn.cursor()
-    c.execute("SELECT id, card_number, expiry_date, credit_score, credit_limit, current_balance FROM credit_cards WHERE user_id = ?", 
-              (user_id,))
+    c.execute("SELECT * FROM credit_cards WHERE user_id = ?", (user_id,))
     cards = c.fetchall()
     conn.close()
     return cards
 
+# Rewards and Offers
+def add_reward(user_id, reward_name, points):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO rewards (user_id, reward_name, points) VALUES (?, ?, ?)", 
+              (user_id, reward_name, points))
+    conn.commit()
+    conn.close()
+
+def get_rewards(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM rewards WHERE user_id = ?", (user_id,))
+    rewards = c.fetchall()
+    conn.close()
+    return rewards
+
+# Transaction History
+def add_transaction(card_number, amount, description):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO transactions (card_number, amount, transaction_date, description) VALUES (?, ?, datetime('now'), ?)", 
+              (card_number, amount, description))
+    conn.commit()
+    conn.close()
+
+def get_last_transactions(card_number, limit=10):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM transactions WHERE card_number = ? ORDER BY transaction_date DESC LIMIT ?", 
+              (card_number, limit))
+    transactions = c.fetchall()
+    conn.close()
+    return transactions
+
+# Analytics and Reports
+def get_transaction_data(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    query = '''
+        SELECT t.card_number, t.amount, t.transaction_date 
+        FROM transactions t 
+        JOIN credit_cards c ON t.card_number = c.card_number 
+        WHERE c.user_id = ? 
+        ORDER BY t.transaction_date ASC
+    '''
+    c.execute(query, (user_id,))
+    data = c.fetchall()
+    conn.close()
+    return pd.DataFrame(data, columns=["Card Number", "Amount", "Transaction Date"])
+
+# Customer Support
+def submit_support_query(user_id, query):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO support_queries (user_id, query) VALUES (?, ?)", (user_id, query))
+    conn.commit()
+    conn.close()
+
+def get_support_faq():
+    return [
+        "Q1: How do I update my account details?",
+        "Q2: How can I add a new credit card?",
+        "Q3: Where can I view my transaction history?",
+        "Q4: How do I redeem my rewards?"
+    ]
+
 # Streamlit App
 def main():
     st.title("Online Credit Card Management System")
+    st.sidebar.title("Navigation")
     menu = ["Login", "Register", "Dashboard"]
     choice = st.sidebar.selectbox("Menu", menu)
 
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
-
     if choice == "Login":
+        st.subheader("Login Section")
         username = st.text_input("Username")
         password = st.text_input("Password", type="password")
         if st.button("Login"):
             user = login_user(username, password)
             if user:
-                st.session_state["logged_in"] = True
-                st.session_state["user_id"] = user[0]
-                st.session_state["username"] = user[1]
-                st.success(f"Welcome {st.session_state['username']}!")
+                st.success(f"Welcome {username}!")
+                st.session_state['logged_in'] = True
+                st.session_state['user_id'] = user[0]
+                st.session_state['username'] = username
             else:
                 st.warning("Incorrect Username/Password")
 
     elif choice == "Register":
+        st.subheader("Create a New Account")
         new_user = st.text_input("Username")
         new_password = st.text_input("Password", type="password")
         email = st.text_input("Email")
         phone = st.text_input("Phone")
         if st.button("Register"):
             result = register_user(new_user, new_password, email, phone)
-            st.success(result)
-
-    elif choice == "Dashboard" and st.session_state["logged_in"]:
-        st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
-        dashboard_menu = ["Credit Card Management"]
-        selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
-
-        if selected_function == "Credit Card Management":
-            st.write("### Add New Credit Card")
-            card_number = st.text_input("Card Number")
-            expiry_date = st.text_input("Expiry Date (MM/YY)")
-            credit_score = st.number_input("Credit Score", min_value=0, max_value=850, step=1)
-            credit_limit = st.number_input("Credit Limit", min_value=0.0, step=0.01)
-            if st.button("Add Card"):
-                result = add_credit_card(st.session_state["user_id"], card_number, expiry_date, credit_score, credit_limit)
-                st.success(result if "successfully" in result else result)
-
-            st.write("### Your Credit Cards")
-            cards = get_credit_cards(st.session_state["user_id"])
-            if cards:
-                df = pd.DataFrame(cards, columns=["ID", "Card Number", "Expiry Date", "Credit Score", "Credit Limit", "Current Balance"])
-                st.dataframe(df)
+            if "successful" in result:
+                st.success(result)
+                st.info("Go to Login Menu to login")
             else:
-                st.write("No credit cards added yet.")
+                st.error(result)
 
-    else:
-        st.warning("Please login to access the Dashboard.")
+    elif choice == "Dashboard":
+        if 'logged_in' not in st.session_state or not st.session_state['logged_in']:
+            st.warning("Please login first.")
+        else:
+            st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
+            dashboard_menu = [
+                "User Management", 
+                "Credit Card Management", 
+                "Rewards and Offers", 
+                "Transaction History", 
+                "Customer Support", 
+                "Analytics and Reports"
+            ]
+            selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
 
-if __name__ == "__main__":
+            if selected_function == "User Management":
+                st.subheader("Update Account Details")
+                email = st.text_input("New Email")
+                phone = st.text_input("New Phone")
+                if st.button("Update Details"):
+                    update_user_details(st.session_state['user_id'], email, phone)
+                    st.success("Account details updated successfully!")
+
+            elif selected_function == "Credit Card Management":
+                st.subheader("Manage Your Credit Cards")
+                action = st.radio("Select Action", ["Add New Card", "View and Edit Cards"])
+                if action == "Add New Card":
+                    card_number = st.text_input("Card Number")
+                    expiry_date = st.text_input("Expiry Date (MM/YY)")
+                    credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
+                    if st.button("Add Card"):
+                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
+                        if "successfully" in result:
+                            st.success(result)
+                        else:
+                            st.error(result)
+                elif action == "View and Edit Cards":
+                    cards = get_credit_cards(st.session_state['user_id'])
+                    for card in cards:
+                        st.write(f"Card Number: {card[2]}")
+                        st.write(f"Expiry Date: {card[3]}")
+                        st.write(f"Credit Score: {card[4]}")
+                        st.write("---")
+                        if st.button(f"Update Card {card[2]}"):
+                            expiry_date = st.text_input("New Expiry Date (MM/YY)", key=f"expiry_{card[0]}")
+                            credit_score = st.number_input("New Credit Score", min_value=0, max_value=850, key=f"score_{card[0]}")
+                            update_credit_card(card[0], expiry_date, credit_score)
+                            st.success("Card details updated successfully!")
+
+            elif selected_function == "Rewards and Offers":
+                st.subheader("Rewards and Offers")
+                rewards = get_rewards(st.session_state['user_id'])
+                for reward in rewards:
+                    st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
+                    st.write("---")
+
+            elif selected_function == "Transaction History":
+                st.subheader("Transaction History")
+                cards = get_credit_cards(st.session_state['user_id'])
+                if cards:
+                    card_number = st.selectbox("Select Credit Card", [card[2] for card in cards])
+                    transactions = get_last_transactions(card_number)
+                    st.write(f"Last 10 Transactions for Card {card_number}:")
+                    for transaction in transactions:
+                        st.write(f"Amount: ₹{transaction[2]}, Date: {transaction[3]}, Description: {transaction[4]}")
+                        st.write("---")
+                else:
+                    st.write("No credit cards found. Please add one first.")
+
+            elif selected_function == "Customer Support":
+                st.subheader("Customer Support")
+                faq = get_support_faq()
+                st.write("Frequently Asked Questions:")
+                for question in faq:
+                    st.write(question)
+                st.write("Submit a Query:")
+                query = st.text_area("Describe your issue")
+                if st.button("Submit Query"):
+                    submit_support_query(st.session_state['user_id'], query)
+                    st.success("Your query has been submitted. Our support team will respond shortly.")
+
+            elif selected_function == "Analytics and Reports":
+                st.subheader("Analytics and Reports")
+                data = get_transaction_data(st.session_state['user_id'])
+                if not data.empty:
+                    st.write("Transaction Data:")
+                    st.dataframe(data)
+                    st.write("### Spending Trends Over Time")
+                    data["Transaction Date"] = pd.to_datetime(data["Transaction Date"])
+                    data.sort_values(by="Transaction Date", inplace=True)
+                    spending_data = data.groupby(data["Transaction Date"].dt.to_period("M"))["Amount"].sum()
+                    st.line_chart(spending_data)
+
+                    st.write("### Total Spending by Credit Card")
+                    card_spending = data.groupby("Card Number")["Amount"].sum()
+                    st.bar_chart(card_spending)
+                else:
+                    st.write("No transaction data available.")
+
+# Initialize Database and Run App
+if __name__ == '__main__':
     init_db()
     main()
