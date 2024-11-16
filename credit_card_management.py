@@ -123,8 +123,9 @@ def check_rewards(user_id):
     c = conn.cursor()
     c.execute('''
         SELECT COUNT(*) 
-        FROM transactions 
-        WHERE user_id = ? AND amount >= 500
+        FROM transactions t
+        JOIN credit_cards c ON t.card_number = c.card_number
+        WHERE c.user_id = ? AND t.amount >= 500
     ''', (user_id,))
     count = c.fetchone()[0]
     conn.close()
@@ -243,16 +244,16 @@ def main():
                     st.success("Account details updated successfully!")
 
             elif selected_function == "Credit Card Management":
-                st.subheader("Manage Your Credit Cards")
-                action = st.radio("Select Action", ["Add New Card", "View and Edit Cards"])
-                if action == "Add New Card":
+                st.subheader("Credit Card Management")
+                card_action = st.selectbox("Select Action", ["Add New Card", "View and Edit Cards"])
+                if card_action == "Add New Card":
                     card_number = st.text_input("Card Number")
                     expiry_date = st.text_input("Expiry Date (MM/YY)")
                     credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
                     if st.button("Add Card"):
                         add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
                         st.success("Card added successfully!")
-                elif action == "View and Edit Cards":
+                elif card_action == "View and Edit Cards":
                     cards = get_credit_cards(st.session_state['user_id'])
                     if cards:
                         selected_card = st.selectbox("Select a Card", [card[2] for card in cards])
