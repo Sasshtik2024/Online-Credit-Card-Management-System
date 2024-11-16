@@ -117,6 +117,22 @@ def get_rewards(user_id):
     conn.close()
     return rewards
 
+def check_rewards(user_id):
+    # Check if the user has 2 transactions of at least 500
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute('''
+        SELECT COUNT(*) 
+        FROM transactions 
+        WHERE user_id = ? AND amount >= 500
+    ''', (user_id,))
+    count = c.fetchone()[0]
+    conn.close()
+    if count >= 2:
+        add_reward(user_id, "Cashback Reward", 100)
+        return "Congratulations! You've earned a cashback reward of 100 points."
+    return "Keep shopping to earn rewards!"
+
 # Transaction History
 def add_transaction(card_number, amount, description):
     conn = sqlite3.connect('credit_card_system.db')
@@ -234,43 +250,28 @@ def main():
                     expiry_date = st.text_input("Expiry Date (MM/YY)")
                     credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
                     if st.button("Add Card"):
-                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
-                        if "successfully" in result:
-                            st.success(result)
-                        else:
-                            st.error(result)
+                        add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
+                        st.success("Card added successfully!")
                 elif action == "View and Edit Cards":
                     cards = get_credit_cards(st.session_state['user_id'])
-                    for card in cards:
-                        st.write(f"Card Number: {card[2]}")
-                        st.write(f"Expiry Date: {card[3]}")
-                        st.write(f"Credit Score: {card[4]}")
-                        st.write("---")
-                        if st.button(f"Update Card {card[2]}"):
-                            expiry_date = st.text_input("New Expiry Date (MM/YY)", key=f"expiry_{card[0]}")
-                            credit_score = st.number_input("New Credit Score", min_value=0, max_value=850, key=f"score_{card[0]}")
-                            update_credit_card(card[0], expiry_date, credit_score)
+                    if cards:
+                        selected_card = st.selectbox("Select a Card", [card[2] for card in cards])
+                        selected_card_data = next(card for card in cards if card[2] == selected_card)
+                        expiry_date = st.text_input("Expiry Date", selected_card_data[3])
+                        credit_score = st.number_input("Credit Score", min_value=0, max_value=850, value=selected_card_data[4])
+                        if st.button("Update Card"):
+                            update_credit_card(selected_card_data[0], expiry_date, credit_score)
                             st.success("Card details updated successfully!")
-
-            elif selected_function == "Perform Transaction":
-                st.subheader("Perform a Transaction")
-                cards = get_credit_cards(st.session_state['user_id'])
-                if cards:
-                    card_number = st.selectbox("Select Credit Card", [card[2] for card in cards])
-                    amount = st.number_input("Amount", min_value=0.01)
-                    description = st.text_input("Transaction Description")
-                    if st.button("Perform Transaction"):
-                        add_transaction(card_number, amount, description)
-                        st.success("Transaction performed successfully!")
-                else:
-                    st.write("No credit cards found. Please add one first.")
 
             elif selected_function == "Rewards and Offers":
                 st.subheader("Rewards and Offers")
                 rewards = get_rewards(st.session_state['user_id'])
+                if not rewards:
+                    st.write("No rewards yet.")
                 for reward in rewards:
                     st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
-                    st.write("---")
+                reward_message = check_rewards(st.session_state['user_id'])
+                st.write(reward_message)
 
             elif selected_function == "Transaction History":
                 st.subheader("Transaction History")
