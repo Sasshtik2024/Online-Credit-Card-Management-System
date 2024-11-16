@@ -37,6 +37,7 @@ def init_db():
                     user_id INTEGER,
                     query TEXT,
                     response TEXT DEFAULT 'Pending',
+                    status TEXT DEFAULT 'Pending',
                     FOREIGN KEY(user_id) REFERENCES users(id))''')
     conn.commit()
     conn.close()
@@ -118,7 +119,6 @@ def get_rewards(user_id):
     return rewards
 
 def check_rewards(user_id):
-    # Check if the user has 2 transactions of at least 500
     conn = sqlite3.connect('credit_card_system.db')
     c = conn.cursor()
     c.execute('''
@@ -176,12 +176,24 @@ def submit_support_query(user_id, query):
     conn.commit()
     conn.close()
 
+def get_user_queries(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT query, response, status FROM support_queries WHERE user_id = ?", (user_id,))
+    queries = c.fetchall()
+    conn.close()
+    return queries
+
 def get_support_faq():
     return [
         "Q1: How do I update my account details?",
+        "A1: Go to User Management under the Dashboard.",
         "Q2: How can I add a new credit card?",
-        "Q3: Where can I view my transaction history?",
-        "Q4: How do I redeem my rewards?"
+        "A2: Navigate to Credit Card Management in the Dashboard.",
+        "Q3: How do I view my transaction history?",
+        "A3: Use the Transaction History option in the Dashboard.",
+        "Q4: How do I redeem my rewards?",
+        "A4: Your rewards are auto-applied after earning thresholds."
     ]
 
 # Streamlit App
@@ -235,93 +247,27 @@ def main():
             ]
             selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
 
-            if selected_function == "User Management":
-                st.subheader("Update Account Details")
-                email = st.text_input("New Email")
-                phone = st.text_input("New Phone")
-                if st.button("Update Details"):
-                    update_user_details(st.session_state['user_id'], email, phone)
-                    st.success("Account details updated successfully!")
-
-            elif selected_function == "Credit Card Management":
-                st.subheader("Credit Card Management")
-                card_action = st.selectbox("Select Action", ["Add New Card", "View and Edit Cards"])
-                if card_action == "Add New Card":
-                    card_number = st.text_input("Card Number")
-                    expiry_date = st.text_input("Expiry Date (MM/YY)")
-                    credit_score = st.number_input("Credit Score", min_value=0, max_value=850)
-                    if st.button("Add Card"):
-                        result = add_credit_card(st.session_state['user_id'], card_number, expiry_date, credit_score)
-                        if "success" in result:
-                            st.success(result)
-                        else:
-                            st.error(result)
-                elif card_action == "View and Edit Cards":
-                    cards = get_credit_cards(st.session_state['user_id'])
-                    if cards:
-                        st.table(cards)
-                        card_id = st.number_input("Card ID to Edit", min_value=0)
-                        new_expiry_date = st.text_input("New Expiry Date (MM/YY)")
-                        new_credit_score = st.number_input("New Credit Score", min_value=0, max_value=850)
-                        if st.button("Update Card Details"):
-                            update_credit_card(card_id, new_expiry_date, new_credit_score)
-                            st.success("Card details updated successfully!")
-
-            elif selected_function == "Rewards and Offers":
-                st.subheader("Rewards and Offers")
-                if st.button("Check for Rewards"):
-                    result = check_rewards(st.session_state['user_id'])
-                    st.info(result)
-                rewards = get_rewards(st.session_state['user_id'])
-                if rewards:
-                    st.table(rewards)
-                else:
-                    st.info("No rewards available. Shop to earn rewards!")
-
-            elif selected_function == "Transaction History":
-                st.subheader("Transaction History")
-                cards = get_credit_cards(st.session_state['user_id'])
-                if cards:
-                    card_number = st.selectbox("Select Card", [card[2] for card in cards])
-                    if st.button("View Transactions"):
-                        transactions = get_last_transactions(card_number)
-                        if transactions:
-                            st.table(transactions)
-                        else:
-                            st.info("No transactions available.")
-                else:
-                    st.warning("No cards found. Add a card first.")
-
-            elif selected_function == "Perform Transaction":
-                st.subheader("Perform a Transaction")
-                cards = get_credit_cards(st.session_state['user_id'])
-                if cards:
-                    card_number = st.selectbox("Select Card", [card[2] for card in cards])
-                    amount = st.number_input("Transaction Amount", min_value=0.0, format="%.2f")
-                    description = st.text_area("Description")
-                    if st.button("Complete Transaction"):
-                        add_transaction(card_number, amount, description)
-                        st.success("Transaction completed successfully!")
-                else:
-                    st.warning("No cards found. Add a card first.")
-
-            elif selected_function == "Customer Support":
+            if selected_function == "Customer Support":
                 st.subheader("Customer Support")
+                st.info("Browse FAQs below for quick help:")
                 faq = get_support_faq()
                 st.markdown("\n".join(faq))
-                query = st.text_area("Submit a Query")
+                
+                st.text_area("Submit a Query", key="query_input")
                 if st.button("Submit Query"):
-                    submit_support_query(st.session_state['user_id'], query)
-                    st.success("Query submitted. Support team will respond soon.")
-
-            elif selected_function == "Analytics and Reports":
-                st.subheader("Transaction Analytics and Reports")
-                data = get_transaction_data(st.session_state['user_id'])
-                if not data.empty:
-                    st.line_chart(data.set_index("Transaction Date")["Amount"])
-                    st.table(data)
+                    if st.session_state["query_input"].strip():
+                        submit_support_query(st.session_state['user_id'], st.session_state["query_input"])
+                        st.success("Query submitted successfully! Our support team will respond soon.")
+                    else:
+                        st.warning("Please enter a query before submitting.")
+                
+                st.write("### Your Submitted Queries")
+                queries = get_user_queries(st.session_state['user_id'])
+                if queries:
+                    df = pd.DataFrame(queries, columns=["Query", "Response", "Status"])
+                    st.table(df)
                 else:
-                    st.info("No transaction data available.")
+                    st.info("You have not submitted any queries yet.")
 
 if __name__ == "__main__":
     init_db()
