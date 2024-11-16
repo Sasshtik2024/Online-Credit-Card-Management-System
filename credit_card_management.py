@@ -230,7 +230,6 @@ def main():
                 else:
                     cards = get_credit_cards(st.session_state['user_id'])
                     for card in cards:
-                        st.write(f"Card Number: {card[2]}, Expiry Date: {card[3]}, Credit Score: {card[4]}, Credit Limit: ₹{card[5]}, Current Balance: ₹{card[6]}")
                         if st.button(f"Edit {card[2]}"):
                             expiry_date = st.text_input(f"Expiry Date for {card[2]}", value=card[3])
                             credit_score = st.number_input(f"Credit Score for {card[2]}", value=card[4])
