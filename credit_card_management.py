@@ -79,14 +79,25 @@ def add_credit_card(user_id, card_number, expiry_date, credit_score, credit_limi
     try:
         conn = sqlite3.connect('credit_card_system.db')
         c = conn.cursor()
+        
+        # Check if the card number already exists
+        c.execute("SELECT * FROM credit_cards WHERE card_number = ?", (card_number,))
+        existing_card = c.fetchone()
+        if existing_card:
+            conn.close()
+            return "Card number already exists."
+        
+        # Insert new credit card
         c.execute("""INSERT INTO credit_cards (user_id, card_number, expiry_date, credit_score, credit_limit) 
                      VALUES (?, ?, ?, ?, ?)""", 
                   (user_id, card_number, expiry_date, credit_score, credit_limit))
         conn.commit()
         conn.close()
+        return "Card added successfully."
+    
     except sqlite3.IntegrityError as e:
+        conn.close()
         return f"Error: {e}. This card number may already exist."
-    return "Card added successfully."
 
 def update_credit_card(card_id, expiry_date, credit_score, credit_limit):
     conn = sqlite3.connect('credit_card_system.db')
@@ -236,37 +247,24 @@ def main():
                             credit_limit = st.number_input(f"Credit Limit for {card[2]}", value=card[5])
                             if st.button(f"Update {card[2]}"):
                                 update_credit_card(card[0], expiry_date, credit_score, credit_limit)
-                                st.success("Card details updated!")
+                                st.success(f"Card {card[2]} updated successfully!")
 
             elif selected_function == "Transaction Management":
-                cards = get_credit_cards(st.session_state['user_id'])
-                if cards:
-                    selected_card = st.selectbox("Select Card", [card[2] for card in cards])
-                    amount = st.number_input("Transaction Amount", min_value=0.0)
-                    description = st.text_input("Transaction Description")
-                    if st.button("Make Transaction"):
-                        result = add_transaction(selected_card, amount, description)
-                        st.success(result if "successful" in result else result)
-                else:
-                    st.warning("No credit cards available. Please add a card.")
+                card_number = st.text_input("Card Number")
+                amount = st.number_input("Transaction Amount")
+                description = st.text_input("Transaction Description")
+                if st.button("Add Transaction"):
+                    result = add_transaction(card_number, amount, description)
+                    st.success(result)
 
             elif selected_function == "Rewards and Offers":
                 rewards = get_rewards(st.session_state['user_id'])
-                if rewards:
-                    st.write("Your Rewards:")
-                    for reward in rewards:
-                        st.write(f"{reward[2]}: {reward[3]} points")
-                else:
-                    st.write("No rewards available yet.")
+                st.write(pd.DataFrame(rewards, columns=["Reward Name", "Points"]))
 
             elif selected_function == "Analytics and Reports":
-                transaction_data = get_transaction_data(st.session_state['user_id'])
-                if not transaction_data.empty:
-                    st.write("Your Transaction Data:")
-                    st.dataframe(transaction_data)
-                else:
-                    st.write("No transactions found.")
+                report = get_transaction_data(st.session_state['user_id'])
+                st.write(report)
 
 if __name__ == "__main__":
-    init_db()  # Initialize the database when the script runs
+    init_db()
     main()
