@@ -31,6 +31,12 @@ def init_db():
                     amount REAL,
                     transaction_date TEXT,
                     description TEXT)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS support_queries (
+                    id INTEGER PRIMARY KEY,
+                    user_id INTEGER,
+                    query TEXT,
+                    response TEXT DEFAULT 'Pending',
+                    FOREIGN KEY(user_id) REFERENCES users(id))''')
     conn.commit()
     conn.close()
 
@@ -128,6 +134,22 @@ def get_last_transactions(card_number, limit=10):
     conn.close()
     return transactions
 
+# Customer Support
+def submit_support_query(user_id, query):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO support_queries (user_id, query) VALUES (?, ?)", (user_id, query))
+    conn.commit()
+    conn.close()
+
+def get_support_faq():
+    return [
+        "Q1: How do I update my account details?",
+        "Q2: How can I add a new credit card?",
+        "Q3: Where can I view my transaction history?",
+        "Q4: How do I redeem my rewards?"
+    ]
+
 # Streamlit App
 def main():
     st.title("Online Credit Card Management System")
@@ -168,7 +190,13 @@ def main():
             st.warning("Please login first.")
         else:
             st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
-            dashboard_menu = ["User Management", "Credit Card Management", "Rewards and Offers", "Transaction History"]
+            dashboard_menu = [
+                "User Management", 
+                "Credit Card Management", 
+                "Rewards and Offers", 
+                "Transaction History", 
+                "Customer Support"
+            ]
             selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
 
             if selected_function == "User Management":
@@ -224,6 +252,19 @@ def main():
                         st.write("---")
                 else:
                     st.write("No credit cards found. Please add one first.")
+
+            elif selected_function == "Customer Support":
+                st.subheader("Customer Support")
+                faq = get_support_faq()
+                st.write("Frequently Asked Questions:")
+                for question in faq:
+                    st.write(question)
+
+                st.write("Submit a Query:")
+                query = st.text_area("Describe your issue")
+                if st.button("Submit Query"):
+                    submit_support_query(st.session_state['user_id'], query)
+                    st.success("Your query has been submitted. Our support team will respond shortly.")
 
 # Initialize Database and Run App
 if __name__ == '__main__':
