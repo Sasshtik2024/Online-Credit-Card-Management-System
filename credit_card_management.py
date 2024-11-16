@@ -25,6 +25,12 @@ def init_db():
                     reward_name TEXT,
                     points INTEGER,
                     FOREIGN KEY(user_id) REFERENCES users(id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS transactions (
+                    id INTEGER PRIMARY KEY,
+                    card_number TEXT,
+                    amount REAL,
+                    transaction_date TEXT,
+                    description TEXT)''')
     conn.commit()
     conn.close()
 
@@ -104,6 +110,24 @@ def get_rewards(user_id):
     conn.close()
     return rewards
 
+# Transaction History
+def add_transaction(card_number, amount, description):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO transactions (card_number, amount, transaction_date, description) VALUES (?, ?, datetime('now'), ?)", 
+              (card_number, amount, description))
+    conn.commit()
+    conn.close()
+
+def get_last_transactions(card_number, limit=10):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM transactions WHERE card_number = ? ORDER BY transaction_date DESC LIMIT ?", 
+              (card_number, limit))
+    transactions = c.fetchall()
+    conn.close()
+    return transactions
+
 # Streamlit App
 def main():
     st.title("Online Credit Card Management System")
@@ -144,7 +168,7 @@ def main():
             st.warning("Please login first.")
         else:
             st.subheader(f"Welcome to your Dashboard, {st.session_state['username']}!")
-            dashboard_menu = ["User Management", "Credit Card Management", "Rewards and Offers"]
+            dashboard_menu = ["User Management", "Credit Card Management", "Rewards and Offers", "Transaction History"]
             selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
 
             if selected_function == "User Management":
@@ -187,6 +211,19 @@ def main():
                 for reward in rewards:
                     st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
                     st.write("---")
+
+            elif selected_function == "Transaction History":
+                st.subheader("Transaction History")
+                cards = get_credit_cards(st.session_state['user_id'])
+                if cards:
+                    card_number = st.selectbox("Select Credit Card", [card[2] for card in cards])
+                    transactions = get_last_transactions(card_number)
+                    st.write(f"Last 10 Transactions for Card {card_number}:")
+                    for transaction in transactions:
+                        st.write(f"Amount: ₹{transaction[2]}, Date: {transaction[3]}, Description: {transaction[4]}")
+                        st.write("---")
+                else:
+                    st.write("No credit cards found. Please add one first.")
 
 # Initialize Database and Run App
 if __name__ == '__main__':
