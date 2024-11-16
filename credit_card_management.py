@@ -1,6 +1,7 @@
 import streamlit as st
 import sqlite3
 from hashlib import sha256
+import pandas as pd
 
 # Database setup
 def init_db():
@@ -134,6 +135,22 @@ def get_last_transactions(card_number, limit=10):
     conn.close()
     return transactions
 
+# Analytics and Reports
+def get_transaction_data(user_id):
+    conn = sqlite3.connect('credit_card_system.db')
+    c = conn.cursor()
+    query = '''
+        SELECT t.card_number, t.amount, t.transaction_date 
+        FROM transactions t 
+        JOIN credit_cards c ON t.card_number = c.card_number 
+        WHERE c.user_id = ? 
+        ORDER BY t.transaction_date ASC
+    '''
+    c.execute(query, (user_id,))
+    data = c.fetchall()
+    conn.close()
+    return pd.DataFrame(data, columns=["Card Number", "Amount", "Transaction Date"])
+
 # Customer Support
 def submit_support_query(user_id, query):
     conn = sqlite3.connect('credit_card_system.db')
@@ -195,7 +212,8 @@ def main():
                 "Credit Card Management", 
                 "Rewards and Offers", 
                 "Transaction History", 
-                "Customer Support"
+                "Customer Support", 
+                "Analytics and Reports"
             ]
             selected_function = st.sidebar.selectbox("Dashboard Menu", dashboard_menu)
 
@@ -228,13 +246,13 @@ def main():
                         st.write(f"Credit Score: {card[4]}")
                         st.write("---")
                         if st.button(f"Update Card {card[2]}"):
-                            new_expiry = st.text_input(f"New Expiry for {card[2]}")
-                            new_score = st.number_input(f"New Credit Score for {card[2]}", min_value=0, max_value=850)
-                            update_credit_card(card[0], new_expiry, new_score)
-                            st.success("Card updated successfully!")
+                            expiry_date = st.text_input("New Expiry Date (MM/YY)", key=f"expiry_{card[0]}")
+                            credit_score = st.number_input("New Credit Score", min_value=0, max_value=850, key=f"score_{card[0]}")
+                            update_credit_card(card[0], expiry_date, credit_score)
+                            st.success("Card details updated successfully!")
 
             elif selected_function == "Rewards and Offers":
-                st.subheader("View Your Rewards")
+                st.subheader("Rewards and Offers")
                 rewards = get_rewards(st.session_state['user_id'])
                 for reward in rewards:
                     st.write(f"Reward: {reward[2]}, Points: {reward[3]}")
@@ -259,12 +277,29 @@ def main():
                 st.write("Frequently Asked Questions:")
                 for question in faq:
                     st.write(question)
-
                 st.write("Submit a Query:")
                 query = st.text_area("Describe your issue")
                 if st.button("Submit Query"):
                     submit_support_query(st.session_state['user_id'], query)
                     st.success("Your query has been submitted. Our support team will respond shortly.")
+
+            elif selected_function == "Analytics and Reports":
+                st.subheader("Analytics and Reports")
+                data = get_transaction_data(st.session_state['user_id'])
+                if not data.empty:
+                    st.write("Transaction Data:")
+                    st.dataframe(data)
+                    st.write("### Spending Trends Over Time")
+                    data["Transaction Date"] = pd.to_datetime(data["Transaction Date"])
+                    data.sort_values(by="Transaction Date", inplace=True)
+                    spending_data = data.groupby(data["Transaction Date"].dt.to_period("M"))["Amount"].sum()
+                    st.line_chart(spending_data)
+
+                    st.write("### Total Spending by Credit Card")
+                    card_spending = data.groupby("Card Number")["Amount"].sum()
+                    st.bar_chart(card_spending)
+                else:
+                    st.write("No transaction data available.")
 
 # Initialize Database and Run App
 if __name__ == '__main__':
